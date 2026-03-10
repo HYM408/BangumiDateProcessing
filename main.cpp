@@ -334,7 +334,7 @@ int main(int argc, char *argv[])
                     QSqlDatabase::removeDatabase(connName);
                     return;
                 }
-                if (!insertSubjectCharacter(subjectFile, db)) {
+                if (!insertSubjectCharacter(subjectCharacterFile, db)) {
                     qDebug() << QThread::currentThreadId() << "插入 Subject_Character 失败";
                     db.close();
                     QSqlDatabase::removeDatabase(connName);
