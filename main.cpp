@@ -286,7 +286,7 @@ int main(int argc, char *argv[])
     if (!downloadFile(downloadUrl, zipPath)) return 1;
     const QString extractDir = QCoreApplication::applicationDirPath() + "/extracted";
     QString episodeFile, subjectFile, characterFile, subjectCharacterFile;
-    if (!extractZip(zipPath, extractDir, episodeFile, subjectFile, subjectCharacterFile, characterFile)) return 1;
+    if (!extractZip(zipPath, extractDir, episodeFile, subjectFile, characterFile, subjectCharacterFile)) return 1;
     QList<QList<int>> typeCombinations = {{1}, {2}, {4}, {1,2}, {1,4}, {2,4}, {1,2,4}};
     QStringList dbNames = {
         "public_date_1.db", "public_date_2.db", "public_date_4.db",
