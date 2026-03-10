@@ -312,7 +312,7 @@ int main(int argc, char *argv[])
                     "CREATE TABLE IF NOT EXISTS character_public_date ("
                     "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
                     "CREATE TABLE IF NOT EXISTS subject_character ("
-                    "subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id)"
+                    "subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id))"
                 };
                 QSqlQuery publicQuery(db);
                 for (const auto &sql : publicTables) publicQuery.exec(sql);
