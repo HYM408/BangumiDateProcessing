@@ -180,7 +180,7 @@ bool insertSubjectCharacter(const QString &filePath, QSqlDatabase db)
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
     QSqlQuery query(db);
-    query.prepare("INSERT OR REPLACE INTO subject_character (subject_id, character_id, type, \"order\") VALUES (?,?,?,?)");
+    query.prepare("INSERT OR REPLACE INTO subject_character (subject_id, character_id, type) VALUES (?,?,?)");
     db.transaction();
     int count = 0;
     constexpr int batchSize = 10000;
@@ -195,11 +195,9 @@ bool insertSubjectCharacter(const QString &filePath, QSqlDatabase db)
         const int subjectId = obj["subject_id"].toInt();
         const int characterId = obj["character_id"].toInt();
         const int type = obj["type"].toInt();
-        const int order = obj["order"].toInt();
         query.addBindValue(subjectId);
         query.addBindValue(characterId);
         query.addBindValue(type);
-        query.addBindValue(order);
         query.exec();
         ++count;
         if (count % batchSize == 0) {
