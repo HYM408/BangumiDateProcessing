@@ -41,6 +41,21 @@ QByteArray compressString(const QString &str)
     return qCompress(original, 9);
 }
 
+QString extractChineseNameFromInfobox(const QString &infobox)
+{
+    if (infobox.isEmpty()) return {};
+    const QStringList lines = infobox.split('\n', Qt::SkipEmptyParts);
+    for (const QString &line : lines) {
+        QString trimmed = line.trimmed();
+        if (trimmed.startsWith("|简体中文名=")) {
+            QString value = trimmed.mid(QString("|简体中文名=").length()).trimmed();
+            if (value.endsWith('}')) value.chop(1);
+            return value;
+        }
+    }
+    return {};
+}
+
 bool insertEpisodeAirdateFromFile(const QString &filePath, QSqlDatabase db)
 {   // episode公共数据插入
     QFile file(filePath);
@@ -125,6 +140,41 @@ bool insertSubjectPublic(const QString& filePath, QSqlDatabase db, const QList<i
     return true;
 }
 
+bool insertCharacterPublic(const QString &filePath, QSqlDatabase db)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    QSqlQuery query(db);
+    query.prepare("INSERT OR REPLACE INTO character_public_date (id, name, name_cn) VALUES (?,?,?)");
+    db.transaction();
+    int count = 0;
+    constexpr int batchSize = 10000;
+    QTextStream stream(&file);
+    while (!stream.atEnd()) {
+        QString line = stream.readLine().trimmed();
+        if (line.isEmpty()) continue;
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) continue;
+        QJsonObject obj = doc.object();
+        const int id = obj["id"].toInt();
+        QString name = obj["name"].toString().trimmed();
+        QString infobox = obj["infobox"].toString();
+        QString name_cn = extractChineseNameFromInfobox(infobox);
+        query.addBindValue(id);
+        query.addBindValue(name);
+        query.addBindValue(name_cn);
+        query.exec();
+        ++count;
+        if (count % batchSize == 0) {
+            db.commit();
+            db.transaction();
+        }
+    }
+    db.commit();
+    return true;
+}
+
 QString fetchBrowserDownloadUrl()
 {
     QNetworkAccessManager manager;
@@ -155,7 +205,7 @@ bool downloadFile(const QString &url, const QString &localPath)
         reply->deleteLater();
         return false;
     }
-    QPointer<QFile> filePtr = &file;
+    QPointer filePtr = &file;
     QObject::connect(reply, &QNetworkReply::readyRead, [filePtr, reply] {if (filePtr) filePtr->write(reply->readAll());});
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     loop.exec();
@@ -166,40 +216,18 @@ bool downloadFile(const QString &url, const QString &localPath)
     return success;
 }
 
-bool extractZip(const QString &zipPath, const QString &destDir, QString &episodePath, QString &subjectPath)
+bool extractZip(const QString &zipPath, const QString &destDir, QString &episodePath, QString &subjectPath, QString &characterPath)
 {
-    // 确保目标目录存在
-    QDir dir;
-    if (!dir.mkpath(destDir)) {
-        qDebug() << "Failed to create destination directory:" << destDir;
-        return false;
-    }
-
-    // 调用系统 unzip 命令
+    const QDir dir;
+    if (!dir.mkpath(destDir)) return false;
     QProcess unzip;
     QStringList args;
-    args << "-o" << zipPath << "-d" << destDir;  // -o 表示覆盖已有文件
+    args << "-o" << zipPath << "-d" << destDir;
     unzip.start("unzip", args);
-    if (!unzip.waitForFinished()) {
-        qDebug() << "unzip process error:" << unzip.errorString();
-        return false;
-    }
-    if (unzip.exitCode() != 0) {
-        qDebug() << "unzip failed, exit code:" << unzip.exitCode();
-        qDebug() << "stderr:" << unzip.readAllStandardError();
-        return false;
-    }
-
-    // 检查解压后的文件
-    QString episodeCandidate = destDir + "/episode.jsonlines";
-    QString subjectCandidate = destDir + "/subject.jsonlines";
-    if (!QFile::exists(episodeCandidate) || !QFile::exists(subjectCandidate)) {
-        qDebug() << "Required files not found after extraction";
-        return false;
-    }
-
-    episodePath = episodeCandidate;
-    subjectPath = subjectCandidate;
+    if (!unzip.waitForFinished()) return false;
+    episodePath = destDir + "/episode.jsonlines";
+    subjectPath = destDir + "/subject.jsonlines";
+    characterPath = destDir + "/character.jsonlines";
     return true;
 }
 
@@ -222,8 +250,8 @@ int main(int argc, char *argv[])
     const QString zipPath = QCoreApplication::applicationDirPath() + "/" + fileName;
     if (!downloadFile(downloadUrl, zipPath)) return 1;
     const QString extractDir = QCoreApplication::applicationDirPath() + "/extracted";
-    QString episodeFile, subjectFile;
-    if (!extractZip(zipPath, extractDir, episodeFile, subjectFile)) return 1;
+    QString episodeFile, subjectFile, characterFile;
+    if (!extractZip(zipPath, extractDir, episodeFile, subjectFile, characterFile)) return 1;
     QList<QList<int>> typeCombinations = {{1}, {2}, {4}, {1,2}, {1,4}, {2,4}, {1,2,4}};
     QStringList dbNames = {
         "public_date_1.db", "public_date_2.db", "public_date_4.db",
@@ -243,14 +271,22 @@ int main(int argc, char *argv[])
                 if (!db.open()) return;
                 const QStringList publicTables = {
                     "CREATE TABLE IF NOT EXISTS episode_public_date ("
-                    "subject_id INTEGER NOT NULL, id INTEGER NOT NULL, airdate INTEGER NOT NULL, sort INTEGER, PRIMARY KEY (subject_id, id))",
+                    "subject_id INTEGER, id INTEGER, airdate INTEGER, sort INTEGER, PRIMARY KEY (subject_id, id))",
                     "CREATE TABLE IF NOT EXISTS subject_public_date ("
-                    "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)"
+                    "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)",
+                    "CREATE TABLE IF NOT EXISTS character_public_date ("
+                    "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)"
                 };
                 QSqlQuery publicQuery(db);
                 for (const auto &sql : publicTables) publicQuery.exec(sql);
                 if (!insertEpisodeAirdateFromFile(episodeFile, db)) {
                     qDebug() << QThread::currentThreadId() << "插入 episode 失败";
+                    db.close();
+                    QSqlDatabase::removeDatabase(connName);
+                    return;
+                }
+                if (!insertCharacterPublic(characterFile, db)) {
+                    qDebug() << QThread::currentThreadId() << "插入 character 失败";
                     db.close();
                     QSqlDatabase::removeDatabase(connName);
                     return;
@@ -267,7 +303,7 @@ int main(int argc, char *argv[])
             qDebug() << dbName << "完成";
         });
     }
-    QThreadPool::globalInstance()->setMaxThreadCount(7);
+    QThreadPool::globalInstance()->setMaxThreadCount(2);
     QtConcurrent::blockingMap(tasks, [](const std::function<void()>& task) {task();});
     return 0;
 }
