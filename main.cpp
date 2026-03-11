@@ -229,7 +229,7 @@ bool insertPerson(const QString &filePath, QSqlDatabase db)
         const int id = obj["id"].toInt();
         QString name = obj["name"].toString().trimmed();
         QString infobox = obj["infobox"].toString();
-        QString name_cn = extractChineseNameFromInfobox(infobox);  // 复用提取中文名的函数
+        QString name_cn = extractChineseNameFromInfobox(infobox);
         query.addBindValue(id);
         query.addBindValue(name);
         query.addBindValue(name_cn);
@@ -379,7 +379,7 @@ int main(int argc, char *argv[])
                     "CREATE TABLE IF NOT EXISTS episode_public_date ("
                     "subject_id INTEGER, id INTEGER, airdate INTEGER, sort INTEGER, PRIMARY KEY (subject_id, id))",
                     "CREATE TABLE IF NOT EXISTS subject_public_date ("
-                    "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)",
+                    "subject_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)",
                     "CREATE TABLE IF NOT EXISTS character_public_date ("
                     "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
                     "CREATE TABLE IF NOT EXISTS subject_character ("
