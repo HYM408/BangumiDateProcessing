@@ -209,6 +209,41 @@ bool insertSubjectCharacter(const QString &filePath, QSqlDatabase db)
     return true;
 }
 
+bool insertPerson(const QString &filePath, QSqlDatabase db)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    QSqlQuery query(db);
+    query.prepare("INSERT OR REPLACE INTO person (person_id, name, name_cn) VALUES (?,?,?)");
+    db.transaction();
+    int count = 0;
+    constexpr int batchSize = 10000;
+    QTextStream stream(&file);
+    while (!stream.atEnd()) {
+        QString line = stream.readLine().trimmed();
+        if (line.isEmpty()) continue;
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) continue;
+        QJsonObject obj = doc.object();
+        const int id = obj["id"].toInt();
+        QString name = obj["name"].toString().trimmed();
+        QString infobox = obj["infobox"].toString();
+        QString name_cn = extractChineseNameFromInfobox(infobox);  // 复用提取中文名的函数
+        query.addBindValue(id);
+        query.addBindValue(name);
+        query.addBindValue(name_cn);
+        query.exec();
+        ++count;
+        if (count % batchSize == 0) {
+            db.commit();
+            db.transaction();
+        }
+    }
+    db.commit();
+    return true;
+}
+
 QString fetchBrowserDownloadUrl()
 {
     QNetworkAccessManager manager;
@@ -250,7 +285,7 @@ bool downloadFile(const QString &url, const QString &localPath)
     return success;
 }
 
-bool extractZip(const QString &zipPath, const QString &destDir, QString &episodePath, QString &subjectPath, QString &characterPath, QString &subjectCharacterPath)
+bool extractZip(const QString &zipPath, const QString &destDir, QString &episodePath, QString &subjectPath, QString &characterPath, QString &subjectCharacterPath, QString &personPath)
 {
     const QDir dir;
     if (!dir.mkpath(destDir)) return false;
@@ -263,6 +298,7 @@ bool extractZip(const QString &zipPath, const QString &destDir, QString &episode
     subjectPath = destDir + "/subject.jsonlines";
     characterPath = destDir + "/character.jsonlines";
     subjectCharacterPath = destDir + "/subject-characters.jsonlines";
+    personPath = destDir + "/person.jsonlines";
     return true;
 }
 
@@ -285,8 +321,8 @@ int main(int argc, char *argv[])
     const QString zipPath = QCoreApplication::applicationDirPath() + "/" + fileName;
     if (!downloadFile(downloadUrl, zipPath)) return 1;
     const QString extractDir = QCoreApplication::applicationDirPath() + "/extracted";
-    QString episodeFile, subjectFile, characterFile, subjectCharacterFile;
-    if (!extractZip(zipPath, extractDir, episodeFile, subjectFile, characterFile, subjectCharacterFile)) return 1;
+    QString episodeFile, subjectFile, characterFile, subjectCharacterFile, personFile;
+    if (!extractZip(zipPath, extractDir, episodeFile, subjectFile, characterFile, subjectCharacterFile, personFile)) return 1;
     QList<QList<int>> typeCombinations = {{1}, {2}, {4}, {1,2}, {1,4}, {2,4}, {1,2,4}};
     QStringList dbNames = {
         "public_date_1.db", "public_date_2.db", "public_date_4.db",
@@ -312,7 +348,9 @@ int main(int argc, char *argv[])
                     "CREATE TABLE IF NOT EXISTS character_public_date ("
                     "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
                     "CREATE TABLE IF NOT EXISTS subject_character ("
-                    "subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id))"
+                    "subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id))",
+                    "CREATE TABLE IF NOT EXISTS person ("
+                    "person_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)"
                 };
                 QSqlQuery publicQuery(db);
                 for (const auto &sql : publicTables) publicQuery.exec(sql);
@@ -336,6 +374,12 @@ int main(int argc, char *argv[])
                 }
                 if (!insertSubjectCharacter(subjectCharacterFile, db)) {
                     qDebug() << QThread::currentThreadId() << "插入 Subject_Character 失败";
+                    db.close();
+                    QSqlDatabase::removeDatabase(connName);
+                    return;
+                }
+                if (!insertPerson(personFile, db)) {
+                    qDebug() << QThread::currentThreadId() << "插入 Person 失败";
                     db.close();
                     QSqlDatabase::removeDatabase(connName);
                     return;
