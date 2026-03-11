@@ -381,7 +381,7 @@ int main(int argc, char *argv[])
                     "CREATE TABLE IF NOT EXISTS subject_public_date ("
                     "subject_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)",
                     "CREATE TABLE IF NOT EXISTS character_public_date ("
-                    "id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
+                    "character_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
                     "CREATE TABLE IF NOT EXISTS subject_character ("
                     "subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id))",
                     "CREATE TABLE IF NOT EXISTS person ("
