@@ -145,7 +145,7 @@ bool insertCharacterPublic(const QString &filePath, QSqlDatabase db)
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
     QSqlQuery query(db);
-    query.prepare("INSERT OR REPLACE INTO character_public_date (id, name, name_cn) VALUES (?,?,?)");
+    query.prepare("INSERT OR REPLACE INTO character_public_date VALUES (?,?,?)");
     db.transaction();
     int count = 0;
     constexpr int batchSize = 10000;
