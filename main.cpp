@@ -61,7 +61,7 @@ bool insertEpisodeAirdateFromFile(const QString &filePath, QSqlDatabase db)
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
     QSqlQuery query(db);
-    query.prepare("INSERT OR REPLACE INTO episode_public_date (subject_id, id, airdate, sort) VALUES (?,?,?,?)");
+    query.prepare("INSERT OR REPLACE INTO episode_public_date (subject_id, episode_id, airdate, sort) VALUES (?,?,?,?)");
     db.transaction();
     int count = 0;
     constexpr int batchSize = 10000;
@@ -75,10 +75,10 @@ bool insertEpisodeAirdateFromFile(const QString &filePath, QSqlDatabase db)
         QString airdateStr = obj["airdate"].toString();
         if (airdateStr.isEmpty()) continue;
         const int subjectId = obj["subject_id"].toInt();
-        const int id = obj["id"].toInt();
+        const int episode_id = obj["id"].toInt();
         const int sort = static_cast<int>(obj["sort"].toDouble() * 10.0);
         query.addBindValue(subjectId);
-        query.addBindValue(id);
+        query.addBindValue(episode_id);
         query.addBindValue(dateStringToTimestamp(airdateStr));
         query.addBindValue(sort);
         query.exec();
@@ -376,18 +376,12 @@ int main(int argc, char *argv[])
                 db.setDatabaseName(dbPath);
                 if (!db.open()) return;
                 const QStringList publicTables = {
-                    "CREATE TABLE IF NOT EXISTS episode_public_date ("
-                    "subject_id INTEGER, id INTEGER, airdate INTEGER, sort INTEGER, PRIMARY KEY (subject_id, id))",
-                    "CREATE TABLE IF NOT EXISTS subject_public_date ("
-                    "subject_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)",
-                    "CREATE TABLE IF NOT EXISTS character_public_date ("
-                    "character_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
-                    "CREATE TABLE IF NOT EXISTS subject_character ("
-                    "subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id))",
-                    "CREATE TABLE IF NOT EXISTS person ("
-                    "person_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
-                    "CREATE TABLE IF NOT EXISTS person_character ("
-                    "person_id INTEGER, subject_id INTEGER, character_id INTEGER, PRIMARY KEY (person_id, subject_id))"
+                    "CREATE TABLE IF NOT EXISTS episode_public_date (subject_id INTEGER, episode_id INTEGER, airdate INTEGER, sort INTEGER, PRIMARY KEY (subject_id, episode_id))",
+                    "CREATE TABLE IF NOT EXISTS subject_public_date (subject_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT, summary BLOB, tags TEXT, meta_tags TEXT, score INTEGER, rank INTEGER, date INTEGER, rating_total INTEGER, doing INTEGER, done INTEGER, dropped INTEGER, on_hold INTEGER, wish INTEGER)",
+                    "CREATE TABLE IF NOT EXISTS character_public_date (character_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
+                    "CREATE TABLE IF NOT EXISTS subject_character (subject_id INTEGER, character_id INTEGER, type INTEGER, PRIMARY KEY (subject_id, character_id))",
+                    "CREATE TABLE IF NOT EXISTS person (person_id INTEGER PRIMARY KEY, name TEXT, name_cn TEXT)",
+                    "CREATE TABLE IF NOT EXISTS person_character (person_id INTEGER, subject_id INTEGER, character_id INTEGER, PRIMARY KEY (person_id, subject_id))"
                 };
                 QSqlQuery publicQuery(db);
                 for (const auto &sql : publicTables) publicQuery.exec(sql);
